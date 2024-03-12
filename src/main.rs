@@ -82,7 +82,9 @@ fn find_command(command: &TreeWalk) -> Result<()> {
         let mut skipped_dirs: u64 = 0;
 
         for result in &results {
-            if result.1.days_old >= command.min_age_days {
+            if result.1.days_old >= command.min_age_days
+                && result.1.size >= ByteSize::mb(command.min_mb).0
+            {
                 found_dirs += 1;
                 found_bytes += result.1.size;
 
