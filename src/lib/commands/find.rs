@@ -14,6 +14,16 @@ pub struct FindResult {
 }
 
 pub type FindResults = HashMap<String, FindResult>;
+pub type FilteredResults<'a> = Vec<&'a FindResult>;
+
+struct ProcessedResults<'a> {
+    results: FilteredResults<'a>,
+    longest_path: usize,
+    found_dirs: u64,
+    found_bytes: u64,
+    skipped_dirs: u64,
+    skipped_bytes: u64,
+}
 
 pub fn find_command(command: &TreeWalk) -> Result<()> {
     if let Commands::Find(ref args) = &command.command {
@@ -23,55 +33,83 @@ pub fn find_command(command: &TreeWalk) -> Result<()> {
 
         do_find(from_path, &args.name, &mut results)?;
 
-        let sorted_results = sorted_results(&results, command.sort_by_age);
-        let path_width = longest_path(&results);
+        let final_results = process_results(
+            &results,
+            command.min_mb,
+            command.min_age_days,
+            command.sort_by_age,
+        );
 
-        // Filter results
-
-        let mut found_dirs: u64 = 0;
-        let mut found_bytes: u64 = 0;
-        let mut skipped_dirs: u64 = 0;
+        let path_width = final_results.longest_path;
 
         println!("");
 
-        for result in &sorted_results {
-            if result.days_old >= command.min_age_days
-                && result.size >= ByteSize::mb(command.min_mb).0
-            {
-                found_dirs += 1;
-                found_bytes += result.size;
-
-                println!(
-                    "{:<path_width$} | uses {:10} | {:4} days old",
-                    result.path,
-                    ByteSize::b(result.size).to_string_as(true),
-                    result.days_old,
-                );
-            } else {
-                skipped_dirs += 1;
-            }
+        for result in final_results.results {
+            println!(
+                "| {:<path_width$} | uses {:>10} | {:4} days old |",
+                result.path,
+                ByteSize::b(result.size).to_string_as(true),
+                result.days_old,
+            );
         }
 
-        let total_size = sorted_results.iter().fold(0, |t, e| t + e.size);
-
         println!(
-            "\nFound   {} directories {}, total size {}",
-            found_dirs,
+            "\nFound   {:5} directories {}, total size {}",
+            final_results.found_dirs,
             &args.name,
-            ByteSize::b(found_bytes).to_string_as(true)
+            ByteSize::b(final_results.found_bytes).to_string_as(true)
         );
 
         println!(
-            "Skipped {} directories {}, total size {}",
-            skipped_dirs,
+            "Skipped {:5} directories {}, total size {}",
+            final_results.skipped_dirs,
             &args.name,
-            ByteSize::b(total_size - found_bytes).to_string_as(true)
+            ByteSize::b(final_results.skipped_bytes).to_string_as(true)
         );
     } else {
         anyhow::bail!("Incorrect args for 'find'");
     }
 
     Ok(())
+}
+
+fn process_results(
+    all_results: &FindResults,
+    min_mb: u64,
+    min_age_days: u64,
+    sort_by_age: bool,
+) -> ProcessedResults {
+    let sorted_results = sorted_results(&all_results, sort_by_age);
+
+    // Filter results
+
+    let mut found_dirs: u64 = 0;
+    let mut found_bytes: u64 = 0;
+    let mut skipped_dirs: u64 = 0;
+
+    let mut filtered_results = Vec::new();
+
+    for result in &sorted_results {
+        if result.days_old >= min_age_days && result.size >= ByteSize::mb(min_mb).0 {
+            found_dirs += 1;
+            found_bytes += result.size;
+
+            filtered_results.push(*result);
+        } else {
+            skipped_dirs += 1;
+        }
+    }
+
+    let total_size = sorted_results.iter().fold(0, |t, e| t + e.size);
+
+    ProcessedResults {
+        longest_path: longest_path(&filtered_results),
+        results: filtered_results,
+        found_dirs,
+        found_bytes,
+        skipped_dirs,
+        skipped_bytes: total_size - found_bytes,
+    }
 }
 
 fn sorted_results(results: &FindResults, sort_by_age: bool) -> Vec<&FindResult> {
@@ -86,8 +124,8 @@ fn sorted_results(results: &FindResults, sort_by_age: bool) -> Vec<&FindResult> 
     results
 }
 
-fn longest_path(results: &FindResults) -> usize {
+fn longest_path(results: &FilteredResults) -> usize {
     results
         .iter()
-        .fold(0, |acc, result| usize::max(acc, result.1.path.len()))
+        .fold(0, |acc, result| usize::max(acc, result.path.len()))
 }
