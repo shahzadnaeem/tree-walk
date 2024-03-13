@@ -21,6 +21,9 @@ pub struct TreeWalk {
 
     #[arg(global = true, long, default_value_t = 14)]
     pub min_age_days: u64,
+
+    #[arg(global = true, long, default_value_t = false)]
+    pub sort_by_age: bool,
 }
 
 #[derive(Debug, Subcommand)]

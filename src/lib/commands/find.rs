@@ -23,48 +23,71 @@ pub fn find_command(command: &TreeWalk) -> Result<()> {
 
         do_find(from_path, &args.name, &mut results)?;
 
+        let sorted_results = sorted_results(&results, command.sort_by_age);
+        let path_width = longest_path(&results);
+
         // Filter results
 
         let mut found_dirs: u64 = 0;
         let mut found_bytes: u64 = 0;
         let mut skipped_dirs: u64 = 0;
 
-        for result in &results {
-            if result.1.days_old >= command.min_age_days
-                && result.1.size >= ByteSize::mb(command.min_mb).0
+        println!("");
+
+        for result in &sorted_results {
+            if result.days_old >= command.min_age_days
+                && result.size >= ByteSize::mb(command.min_mb).0
             {
                 found_dirs += 1;
-                found_bytes += result.1.size;
+                found_bytes += result.size;
 
                 println!(
-                    "{:60} uses {}, {} days old",
-                    result.1.path,
-                    ByteSize::b(result.1.size).to_string_as(true),
-                    result.1.days_old,
+                    "{:<path_width$} | uses {:10} | {:4} days old",
+                    result.path,
+                    ByteSize::b(result.size).to_string_as(true),
+                    result.days_old,
                 );
             } else {
                 skipped_dirs += 1;
             }
         }
 
-        let total_size = results.iter().fold(0, |t, e| t + e.1.size);
+        let total_size = sorted_results.iter().fold(0, |t, e| t + e.size);
 
         println!(
-            "Found   {} directories {}, total size {}",
+            "\nFound   {} directories {}, total size {}",
             found_dirs,
             &args.name,
-            ByteSize::b(found_bytes)
+            ByteSize::b(found_bytes).to_string_as(true)
         );
 
         println!(
             "Skipped {} directories {}, total size {}",
             skipped_dirs,
             &args.name,
-            ByteSize::b(total_size - found_bytes)
+            ByteSize::b(total_size - found_bytes).to_string_as(true)
         );
     } else {
         anyhow::bail!("Incorrect args for 'find'");
     }
 
     Ok(())
+}
+
+fn sorted_results(results: &FindResults, sort_by_age: bool) -> Vec<&FindResult> {
+    let mut results: Vec<_> = results.values().collect();
+
+    if sort_by_age {
+        results.sort_by(|a, b| b.days_old.cmp(&a.days_old));
+    } else {
+        results.sort_by(|a, b| b.size.cmp(&a.size));
+    }
+
+    results
+}
+
+fn longest_path(results: &FindResults) -> usize {
+    results
+        .iter()
+        .fold(0, |acc, result| usize::max(acc, result.1.path.len()))
 }

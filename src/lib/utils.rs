@@ -12,17 +12,20 @@ pub fn do_find(dir: &Path, name: &str, results: &mut FindResults) -> Result<()> 
 
     for e in dir_entries {
         let path = e?.path();
-        if path.is_dir() && path.ends_with(name) {
-            results.insert(
-                path.display().to_string(),
-                FindResult {
-                    path: path.display().to_string(),
-                    size: total_size(&path)?,
-                    days_old: earliest_modified(path.parent().unwrap())?, //days_old(&path)?,
-                },
-            );
-        } else if path.is_dir() {
-            do_find(&path, name, results)?;
+
+        if !path.is_symlink() {
+            if path.is_dir() && path.ends_with(name) {
+                results.insert(
+                    path.display().to_string(),
+                    FindResult {
+                        path: path.display().to_string(),
+                        size: total_size(&path)?,
+                        days_old: earliest_modified(path.parent().unwrap())?,
+                    },
+                );
+            } else if path.is_dir() {
+                do_find(&path, name, results)?;
+            }
         }
     }
 
@@ -30,12 +33,20 @@ pub fn do_find(dir: &Path, name: &str, results: &mut FindResults) -> Result<()> 
 }
 
 pub fn days_old(path: &Path) -> Result<u64> {
-    let metadata = fs::metadata(path)?;
-    let now = SystemTime::now();
-    let modified = now.duration_since(metadata.modified()?)?;
-    let days_ago = modified.as_secs() / (24 * 3600);
+    if !path.is_symlink() {
+        let metadata = fs::metadata(path).context(format!(
+            "Failed to get metadata for path: {}",
+            path.display()
+        ))?;
 
-    Ok(days_ago)
+        let now = SystemTime::now();
+        let modified = now.duration_since(metadata.modified()?)?;
+        let days_ago = modified.as_secs() / (24 * 3600);
+
+        Ok(days_ago)
+    } else {
+        Ok(u64::MAX)
+    }
 }
 
 pub fn earliest_modified(path: &Path) -> Result<u64> {
@@ -82,22 +93,27 @@ fn do_earliest_modified(path: &Path, result: u64, result_path: &mut String) -> R
 }
 
 pub fn total_size(path: &Path) -> Result<u64> {
-    if !path.is_symlink() && path.is_file() {
-        let metadata = fs::metadata(path)?;
+    if !path.is_symlink() {
+        if path.is_file() {
+            let metadata = fs::metadata(path).context(format!(
+                "Failed to get metadata for path: {}",
+                path.display()
+            ))?;
 
-        return Ok(metadata.size() as u64);
-    } else if path.is_dir() {
-        let mut size: u64 = 0;
+            return Ok(metadata.size() as u64);
+        } else if path.is_dir() {
+            let mut size: u64 = 0;
 
-        let entries = fs::read_dir(path)?;
+            let entries = fs::read_dir(path)?;
 
-        for e in entries {
-            let path = e?.path();
+            for e in entries {
+                let path = e?.path();
 
-            size += total_size(&path)?;
+                size += total_size(&path)?;
+            }
+
+            return Ok(size);
         }
-
-        return Ok(size);
     }
 
     return Ok(0);
