@@ -19,7 +19,7 @@ pub struct TreeWalk {
     #[arg(global = true, long, default_value_t = 10)]
     pub min_mb: u64,
 
-    #[arg(global = true, long, default_value_t = 120)]
+    #[arg(global = true, long, default_value_t = 14)]
     pub min_age_days: u64,
 }
 

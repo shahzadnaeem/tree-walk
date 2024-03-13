@@ -39,7 +39,7 @@ pub fn find_command(command: &TreeWalk) -> Result<()> {
                 println!(
                     "{:60} uses {}, {} days old",
                     result.1.path,
-                    ByteSize::b(result.1.size),
+                    ByteSize::b(result.1.size).to_string_as(true),
                     result.1.days_old,
                 );
             } else {
