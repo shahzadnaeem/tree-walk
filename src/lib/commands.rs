@@ -28,15 +28,16 @@ pub struct TreeWalk {
 
 #[derive(Debug, Subcommand)]
 pub enum Commands {
-    #[command(arg_required_else_help = true)]
+    #[command()]
     Find(FindArgs),
 
-    #[command(arg_required_else_help = true)]
+    #[command()]
     Delete(FindArgs),
 }
 
 #[derive(Debug, Args)]
 pub struct FindArgs {
+    #[arg(default_value = "node_modules")]
     pub name: String,
 }
 
