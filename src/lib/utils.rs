@@ -3,33 +3,111 @@ use std::time::SystemTime;
 use std::{fs, os::unix::fs::MetadataExt};
 
 use anyhow::{Context, Result};
+use bytesize::ByteSize;
 
-use crate::commands::find::{FindResult, FindResults};
+use crate::commands::{FindArgs, TreeWalk};
 
-pub fn do_find(dir: &Path, name: &str, results: &mut FindResults) -> Result<()> {
+pub struct FindResult {
+    pub path: String,
+    pub size: u64,
+    pub days_old: u64,
+}
+
+pub type FindResults = Vec<FindResult>;
+
+pub struct ProcessedResults {
+    pub results: FindResults,
+    pub longest_path: usize,
+    pub found_dirs: u64,
+    pub found_bytes: u64,
+    pub skipped_dirs: u64,
+    pub skipped_bytes: u64,
+}
+
+pub fn find(command: &TreeWalk, args: &FindArgs) -> Result<ProcessedResults> {
+    let from_path = Path::new(&command.from);
+
+    let mut results = Vec::new();
+
+    do_find(from_path, args, &mut results)?;
+
+    let results = process_results(
+        results,
+        command.min_mb,
+        command.min_age_days,
+        command.sort_by_age,
+    );
+
+    Ok(results)
+}
+
+fn do_find(from_path: &Path, args: &FindArgs, results: &mut FindResults) -> Result<()> {
     let dir_entries =
-        fs::read_dir(dir).context(format!("Failed to open dir: {}", dir.display()))?;
+        fs::read_dir(from_path).context(format!("Failed to open dir: {}", from_path.display()))?;
 
     for e in dir_entries {
         let path = e?.path();
 
         if !path.is_symlink() {
-            if path.is_dir() && path.ends_with(name) {
-                results.insert(
-                    path.display().to_string(),
-                    FindResult {
-                        path: path.display().to_string(),
-                        size: total_size(&path)?,
-                        days_old: earliest_modified(path.parent().unwrap())?,
-                    },
-                );
+            if path.is_dir() && path.ends_with(&args.name) {
+                results.push(FindResult {
+                    path: path.display().to_string(),
+                    size: total_size(&path)?,
+                    days_old: earliest_modified(path.parent().unwrap())?,
+                });
             } else if path.is_dir() {
-                do_find(&path, name, results)?;
+                do_find(&path, args, results)?;
             }
         }
     }
 
     Ok(())
+}
+
+fn process_results(
+    mut results: FindResults,
+    min_mb: u64,
+    min_age_days: u64,
+    sort_by_age: bool,
+) -> ProcessedResults {
+    sort_results(&mut results, sort_by_age);
+
+    // Filter results
+
+    let orig_num_dirs = results.len();
+    let orig_total_bytes = results.iter().fold(0, |acc, e| acc + e.size);
+
+    let filtered_results: FindResults = results
+        .into_iter()
+        .filter(|result| result.days_old >= min_age_days && result.size >= ByteSize::mb(min_mb).0)
+        .collect();
+
+    let found_dirs = filtered_results.len();
+    let found_bytes = filtered_results.iter().fold(0, |acc, e| acc + e.size);
+    let skipped_dirs = (orig_num_dirs - found_dirs) as u64;
+
+    ProcessedResults {
+        longest_path: longest_path(&filtered_results),
+        found_dirs: found_dirs as u64,
+        found_bytes,
+        skipped_dirs,
+        skipped_bytes: orig_total_bytes - found_bytes,
+        results: filtered_results,
+    }
+}
+
+fn sort_results(results: &mut FindResults, sort_by_age: bool) {
+    if sort_by_age {
+        results.sort_by(|a, b| b.days_old.cmp(&a.days_old));
+    } else {
+        results.sort_by(|a, b| b.size.cmp(&a.size));
+    }
+}
+
+fn longest_path(results: &FindResults) -> usize {
+    results
+        .iter()
+        .fold(0, |acc, result| usize::max(acc, result.path.len()))
 }
 
 pub fn days_old(path: &Path) -> Result<u64> {
