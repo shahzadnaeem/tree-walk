@@ -1,6 +1,12 @@
+use std::fs;
+use std::fs::Metadata;
 use std::path::Path;
 use std::time::SystemTime;
-use std::{fs, os::unix::fs::MetadataExt};
+
+#[cfg(not(target_os = "windows"))]
+use std::os::unix::fs::MetadataExt;
+#[cfg(target_os = "windows")]
+use std::os::windows::fs::MetadataExt;
 
 use anyhow::{Context, Result};
 use bytesize::ByteSize;
@@ -178,7 +184,7 @@ pub fn total_size(path: &Path) -> Result<u64> {
                 path.display()
             ))?;
 
-            return Ok(metadata.size() as u64);
+            return Ok(metadata_size(&metadata));
         } else if path.is_dir() {
             let mut size: u64 = 0;
 
@@ -195,4 +201,14 @@ pub fn total_size(path: &Path) -> Result<u64> {
     }
 
     return Ok(0);
+}
+
+#[cfg(target_os = "windows")]
+fn metadata_size(metadata: &Metadata) -> u64 {
+    metadata.file_size()
+}
+
+#[cfg(not(target_os = "windows"))]
+fn metadata_size(metadata: &Metadata) -> u64 {
+    metadata.size()
 }
