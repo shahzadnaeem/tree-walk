@@ -39,9 +39,11 @@ pub enum Commands {
     Delete(DeleteArgs),
 }
 
+const DEFAULT_NAME: &str = "node_modules";
+
 #[derive(Debug, Args)]
 pub struct FindArgs {
-    #[arg(default_value = "node_modules")]
+    #[arg(default_value = DEFAULT_NAME)]
     pub name: String,
 }
 
@@ -57,7 +59,7 @@ pub const NO_CODE: &str = "No code";
 
 #[derive(Debug, Args)]
 pub struct DeleteArgs {
-    #[arg(default_value = "node_modules")]
+    #[arg(default_value = DEFAULT_NAME)]
     pub name: String,
     #[arg(default_value = NO_CODE)]
     pub code: String,
