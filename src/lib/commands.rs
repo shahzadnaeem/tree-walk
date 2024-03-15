@@ -1,9 +1,13 @@
 #[path = "commands/find.rs"]
 pub mod find;
 
+#[path = "commands/delete.rs"]
+pub mod delete;
+
 use anyhow::Result;
 use clap::{Args, Parser, Subcommand};
 
+use delete::delete_command;
 use find::find_command;
 
 #[derive(Debug, Parser)]
@@ -47,7 +51,7 @@ impl TreeWalk {
 
         match tree_walk.command {
             Commands::Find(_) => find_command(&tree_walk),
-            err => anyhow::bail!("Unknown command: {:?}", err),
+            Commands::Delete(_) => delete_command(&tree_walk),
         }
     }
 }
