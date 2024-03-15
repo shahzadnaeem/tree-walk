@@ -36,13 +36,31 @@ pub enum Commands {
     Find(FindArgs),
 
     #[command()]
-    Delete(FindArgs),
+    Delete(DeleteArgs),
 }
 
 #[derive(Debug, Args)]
 pub struct FindArgs {
     #[arg(default_value = "node_modules")]
     pub name: String,
+}
+
+impl From<&DeleteArgs> for FindArgs {
+    fn from(value: &DeleteArgs) -> Self {
+        FindArgs {
+            name: value.name.clone(),
+        }
+    }
+}
+
+pub const NO_CODE: &str = "No code";
+
+#[derive(Debug, Args)]
+pub struct DeleteArgs {
+    #[arg(default_value = "node_modules")]
+    pub name: String,
+    #[arg(default_value = NO_CODE)]
+    pub code: String,
 }
 
 impl TreeWalk {
